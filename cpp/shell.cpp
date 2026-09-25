@@ -123,7 +123,21 @@ void Shell::buildUi() {
     m_status->setWordWrap(true);
     m_status->setTextFormat(Qt::PlainText);
     m_status->setMinimumHeight(48);
-    layout->addWidget(m_status, 0);
+
+    m_requestAccess = new QPushButton(QStringLiteral("Give Access"), this);
+    m_requestAccess->setToolTip(
+        QStringLiteral("Run pkexec to grant this user access to the mouse's hidraw node"));
+    m_requestAccess->setVisible(m_device->getNeedsAccess());
+    connect(m_requestAccess, &QPushButton::clicked, this, [this] {
+        // One prompt at a time; whichever event ends the attempt brings it back.
+        m_requestAccess->setEnabled(false);
+        m_device->requestAccess();
+    });
+
+    auto* statusRow = new QHBoxLayout;
+    statusRow->addWidget(m_status, 1);
+    statusRow->addWidget(m_requestAccess, 0, Qt::AlignBottom);
+    layout->addLayout(statusRow, 0);
 
     m_writeTimer = new QTimer(this);
     m_writeTimer->setSingleShot(true);
@@ -447,6 +461,19 @@ void Shell::updateTray() {
     m_tray->setIcon(batteryIcon());
 }
 
+/// The manual polkit fallback: shown only while the device is unreachable for
+/// want of permission, and re-enabled whenever an attempt ends.
+void Shell::refreshAccessButton() {
+    if (!m_requestAccess) {
+        return;
+    }
+    const bool needed = m_device->getNeedsAccess();
+    m_requestAccess->setVisible(needed);
+    if (needed) {
+        m_requestAccess->setEnabled(true);
+    }
+}
+
 void Shell::updateStatus() {
     QStringList lines;
     lines << m_device->getStatusText();
@@ -686,8 +713,13 @@ int igm5000_run() {
     QObject::connect(device, &igm5000::Device::batteryChanged, shell, refreshStatus);
     QObject::connect(device, &igm5000::Device::chargingChanged, shell, refreshStatus);
     QObject::connect(device, &igm5000::Device::connectedChanged, shell, refreshStatus);
-    QObject::connect(device, &igm5000::Device::statusTextChanged, shell,
-                     [shell] { shell->updateStatus(); });
+    QObject::connect(device, &igm5000::Device::needsAccessChanged, shell,
+                     [shell] { shell->refreshAccessButton(); });
+    QObject::connect(device, &igm5000::Device::statusTextChanged, shell, [shell] {
+        shell->updateStatus();
+        // A failed grant ends in a status update: bring the button back.
+        shell->refreshAccessButton();
+    });
     QObject::connect(device, &igm5000::Device::modeChanged, shell,
                      [shell] { shell->updateMode(); });
     QObject::connect(device, &igm5000::Device::errorOccurred, shell,

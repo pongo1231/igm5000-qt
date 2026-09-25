@@ -2,8 +2,16 @@
 # The mouse exposes two HID interfaces; only the second one (bInterfaceNumber 01)
 # carries the vendor feature reports (ID 5 = command channel, ID 8 = data channel).
 #
-# Install as /etc/udev/rules.d/99-isymouse.rules then:
-#   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+# Installed by nixosModules.default as /etc/udev/rules.d/60-isymouse.rules, before
+# systemd's 73-seat-late.rules, which is what queues the uaccess builtin for the
+# tag below (a tag added in 99-local.rules is recorded but never acted on).
+#
+# The tag alone still left this node without an ACL on the Steam Deck, despite an
+# active seat session, so these rules also grant access deterministically: MODE
+# and GROUP hand the node to the local `users` group when it is created. Both
+# mechanisms are kept — the tag is the narrower grant wherever uaccess does fire.
+#
+# After editing: sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002e", ATTRS{bInterfaceNumber}=="01", TAG+="uaccess"
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", ATTRS{bInterfaceNumber}=="01", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002e", ATTRS{bInterfaceNumber}=="01", MODE="0660", GROUP="users", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="002f", ATTRS{bInterfaceNumber}=="01", MODE="0660", GROUP="users", TAG+="uaccess"

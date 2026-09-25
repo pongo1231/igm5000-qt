@@ -32,6 +32,7 @@ pub mod qobject {
     extern "RustQt" {
         #[qobject]
         #[qproperty(bool, connected)]
+        #[qproperty(bool, needs_access)]
         #[qproperty(i32, battery)]
         #[qproperty(bool, charging)]
         #[qproperty(i32, mode)]
@@ -45,6 +46,11 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "refresh"]
         fn refresh(self: Pin<&mut Self>);
+        /// Ask polkit for access to the hidraw node; the shell shows this as a
+        /// button when the device is unreachable for want of permission.
+        #[qinvokable]
+        #[cxx_name = "requestAccess"]
+        fn request_access(self: Pin<&mut Self>);
         #[qinvokable]
         #[cxx_name = "reload"]
         fn reload(self: Pin<&mut Self>);
@@ -144,6 +150,7 @@ pub struct DeviceRust {
     mode: i32,
     status_text: QString,
     device_info: QString,
+    needs_access: bool,
 
     block: SettingsBlock,
     block_loaded: bool,
@@ -162,6 +169,7 @@ impl Default for DeviceRust {
             mode: 0,
             status_text: QString::from("No device"),
             device_info: QString::default(),
+            needs_access: false,
             block: SettingsBlock::new([0; BLOCK_LEN]),
             block_loaded: false,
             generation: 0,
@@ -274,6 +282,10 @@ impl qobject::Device {
 
     pub fn refresh(self: Pin<&mut Self>) {
         self.send(Command::Refresh);
+    }
+
+    pub fn request_access(self: Pin<&mut Self>) {
+        self.send(Command::RequestAccess);
     }
 
     pub fn reload(self: Pin<&mut Self>) {
@@ -463,6 +475,9 @@ impl qobject::Device {
                 self.as_mut().inner_mut().bank_value = i32::from(bank);
                 let state = self.state_text();
                 self.as_mut().set_status_text(state);
+            }
+            Event::NeedsAccess(needed) => {
+                self.as_mut().set_needs_access(needed);
             }
             Event::Disconnected(reason) => {
                 self.as_mut().set_connected(false);

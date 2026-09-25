@@ -48,8 +48,16 @@
       # Importing this is all a host needs: the udev rules plus the configurator
       # itself (taken from this flake's own package output).
       nixosModules.default = { pkgs, ... }: {
-        # The same rules the udev file ships: read from it so they cannot drift.
-        services.udev.extraRules = builtins.readFile ./99-isymouse.rules;
+        # Installed as its own early-numbered file instead of through
+        # services.udev.extraRules (which lands in 99-local.rules): systemd's
+        # 73-seat-late.rules queues the uaccess builtin only for devices that
+        # already carry the tag when it runs. The rules also grant access through
+        # the `users` group, so a host whose uaccess setup does not fire (the Deck,
+        # in practice) still gets working device access.
+        services.udev.packages = [
+          (pkgs.writeTextDir "lib/udev/rules.d/60-isymouse.rules"
+            (builtins.readFile ./99-isymouse.rules))
+        ];
         environment.systemPackages = [
           self.packages.${pkgs.stdenv.hostPlatform.system}.default
         ];

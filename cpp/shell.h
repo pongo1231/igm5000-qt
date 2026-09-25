@@ -18,6 +18,7 @@ class QSpinBox;
 class QSystemTrayIcon;
 class QTabWidget;
 class QTimer;
+class QPushButton;
 
 /// Widget shell for the IGM 5000 configurator: owns every widget and the tray
 /// icon, while all device state lives in the Rust `igm5000::Device` qobject.
@@ -34,6 +35,7 @@ public:
     void updateMode();
     void pullFromDevice();
     void refreshEditorEnablement();
+    void refreshAccessButton();
     void showError(const QString& message);
     void showNote(const QString& message);
 
@@ -76,6 +78,7 @@ private:
     QAction* m_startMinimized{};
 
     QTimer* m_writeTimer{};
+    QPushButton* m_requestAccess{};
     QSet<int> m_dirty;
     bool m_editorsEnabled{false};
     bool m_quitting{false};

@@ -17,6 +17,8 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5);
 pub enum Command {
     /// Status, plus the settings block when none has been loaded yet.
     Refresh,
+    /// The user asked for device access again: allow one more polkit prompt.
+    RequestAccess,
     /// Re-read psd/mode/status/block from the device.
     Reload,
     ApplyBlock { block: [u8; BLOCK_LEN], generation: u64 },
@@ -40,6 +42,9 @@ pub enum Event {
     },
     /// Why the device dropped out, e.g. "permission denied on hidraw node".
     Disconnected(String),
+    /// Whether the device is unreachable for want of permission, so the shell
+    /// can offer the manual polkit request.
+    NeedsAccess(bool),
     /// `percent` is the charge to show, not necessarily the device's raw byte
     /// (see `charge_to_show`).
     Status {
@@ -141,10 +146,15 @@ impl Session {
             return true;
         }
         match self.open(publish) {
-            Ok(()) => true,
+            Ok(()) => {
+                publish(Event::NeedsAccess(false));
+                true
+            }
             Err(e) => {
+                let needs_access = matches!(e, Error::PermissionDenied | Error::Escalation(_));
                 self.drop_transport();
                 publish(Event::Disconnected(e.to_string()));
+                publish(Event::NeedsAccess(needs_access));
                 false
             }
         }
@@ -329,11 +339,20 @@ impl Session {
         self.poll(publish);
     }
 
+    /// The shell's "Give Access" button: reset the one-prompt guard and try
+    /// to connect again, which re-runs the polkit grant.
+    fn request_access(&mut self, publish: &dyn Fn(Event)) {
+        self.access_requested = false;
+        self.drop_transport();
+        self.connect(publish);
+    }
+
     /// Handle one command; `false` means the thread should stop.
     fn handle(&mut self, command: Command, publish: &dyn Fn(Event)) -> bool {
         match command {
             Command::Refresh => self.refresh(publish),
             Command::Reload => self.reload(publish),
+            Command::RequestAccess => self.request_access(publish),
             Command::ApplyBlock { block, generation } => {
                 self.apply_block(block, generation, publish);
             }
